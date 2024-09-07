@@ -5,7 +5,6 @@ import threading# 线程
 import time# 时间
 import openai# openai
 
-from tools.audio import AudioModule# 音频模块
 from tools.store import SimpleStoreTool, VectorStoreTool# 存储模块
 from tools.text import high_word_similarity_text_filter# 文本过滤
 from tools.utils import load_txt_to_lst, load_last_n_lines, append_to_str_file, openai_moderation, CharacterInfo# 工具函数
@@ -19,35 +18,26 @@ def collect_context(text_lst):
 # 主代理类
 class MainAgent:
     def __init__(self,
-                 world_name,
-                 ai_name,
                  llm,
                  embed_model,
                  config):
         """
-        :param world_name: 世界名称
-        :param ai_name: 角色名称
+        :param ai: 助手
         :param llm: 大模型实例
         :param embed_model: 记忆检索使用的文本转向量模型实例
         :param config: 基本设置(config.ini)
         """
         # ---基本设置参数
         self.base_config = config
-        self.world_name = world_name
-        self.ai_name = ai_name
-        self.user_name = self.base_config.user_name
-        self.info = CharacterInfo(self.world_name, self.ai_name)#在utils.py中定义
-        # ---
+        self.info = CharacterInfo()#在utils.py中定义
 
         # ------高级开发参数
         self.dev_config = DevConfig()#在config.py中定义
-        # ------
 
-        # ---暂存区，有查询，实体，对话，事件，最后答案，步长
+        # ---暂存区，有查询，实体，对话，最后答案，步长
         self.query = ''
         self.entity_text = ''
         self.dialog_text = ''
-        self.event_text = ''
         self.last_ans = ''
         self.step = 1
         # ---
@@ -62,9 +52,7 @@ class MainAgent:
         self.store_tool = self.load_store_tool()
         self.entity_store = self.store_tool.load_entity_store()
         self.history_store = self.store_tool.load_history_store()
-        self.event_store = self.store_tool.load_event_store()
 
-        print("【---" + self.ai_name + "记忆模块加载完成---】")
         self.llm = llm
         # 历史对话列表
         self.history = []
@@ -75,30 +63,6 @@ class MainAgent:
         self.load_history(self.basic_history)
         # 窗口控制变量
         self.total_token_size = 0
-        print("【---" + self.ai_name + "对话模型加载完成---】")
-        # ---voice
-        # ---声音模块
-        speak_rate = self.base_config.speak_rate
-        if speak_rate == '快':
-            rate = 200
-        elif speak_rate == '中':
-            rate = 150
-        elif speak_rate == '慢':
-            rate = 100
-        else:
-            rate = 150
-        # ---
-        self.voice_module = AudioModule(sound_library='local', rate=rate)
-        print("【---" + self.ai_name + "声音模块加载完成---】")
-        # ---
-
-    # 设置身份
-    def set_identity(self, world_name, ai_name, user_name):
-        self.world_name = world_name
-        self.ai_name = ai_name
-        self.user_name = user_name
-        self.info = CharacterInfo(self.world_name, self.ai_name)
-        self.reset_history(self.info)
 
     # 重置历史
     def reset_history(self, info):
@@ -121,28 +85,11 @@ class MainAgent:
         self.store_tool = self.load_store_tool()
         self.entity_store = self.store_tool.load_entity_store()
         self.history_store = self.store_tool.load_history_store()
-        self.event_store = self.store_tool.load_event_store()
-        # 声音模块
-        self.set_audio_module()
 
     # 重新加载开发配置
     def reload_dev_config(self):
         self.dev_config = DevConfig()
 
-    # 设置声音模块
-    def set_audio_module(self):
-        # ---声音模块
-        speak_rate = self.base_config.speak_rate
-        if speak_rate == '快':
-            rate = 200
-        elif speak_rate == '中':
-            rate = 150
-        elif speak_rate == '慢':
-            rate = 100
-        else:
-            rate = 150
-        # ---
-        self.voice_module = AudioModule(sound_library='local', rate=rate)
 
     # 加载存储工具
     def load_store_tool(self):
@@ -168,21 +115,16 @@ class MainAgent:
     def get_last_ans(self):
         return self.last_ans
 
-    # 设置用户名
-    def set_user_name(self, user_name):
-        self.user_name = user_name
-
     # 聊天
     def chat(self, query):
         # 文本中加入提问者身份
         q_start = self.user_name + "说：" if self.user_name != '' else ''
         # ------检索记忆（实体、对话、事件）
         # 获取上文窗口
-        entity_lst, dialog_lst, event_lst = self.get_related(self.get_context_window(q_start + query))
+        entity_lst, dialog_lst= self.get_related(self.get_context_window(q_start + query))
         # 嵌入提示词
         self.entity_text = collect_context(entity_lst)
         self.dialog_text = collect_context(dialog_lst)
-        self.event_text = collect_context(event_lst)
         context_len = self.embedding_context(self.entity_text, self.dialog_text, self.event_text)
         # ------
 
@@ -218,10 +160,10 @@ class MainAgent:
         # ---处理对话历史
         self.cur_prompt = self.history[0][0]
         # 如果开头已经有"xxx说"，则不补全ai名字
-        if ans.startswith(self.ai_name + '说：') or ans.startswith(self.ai_name + '说:'):
+        if ans.startswith(self.ai + '说：') or ans.startswith(self.ai + '说:'):
             final_ans = ans
         else:
-            final_ans = self.ai_name + '说：' + ans
+            final_ans = self.ai + '说：' + ans
         self.history.append((q_start + query, final_ans))
 
         # 计算当前使用的token数
@@ -325,20 +267,13 @@ class MainAgent:
     # 嵌入上下文
     def embedding_context(self, entity, dialog, event):
 
-        entity = entity.replace("{{{AI_NAME}}}", self.ai_name)
-        dialog = dialog.replace("{{{AI_NAME}}}", self.ai_name)
-        event = event.replace("{{{AI_NAME}}}", self.ai_name)
-
         context = self.history[0][0]
         context = context.replace("{{{ENTITY}}}", entity)
         context = context.replace("{{{DIALOG}}}", dialog)
-        context = context.replace("{{{EVENT}}}", event)
-        context = context.replace("{{{AI_NAME}}}", self.ai_name)
-        context = context.replace("{{{USER_NAME}}}", self.user_name)
 
-        first_ans = self.history[0][1].replace("{{{AI_NAME}}}", self.ai_name)
+        first_ans = self.history[0][1].replace("{{{AI}}}", self.ai)
 
-        context_len = len(entity) + len(dialog) + len(event)
+        context_len = len(entity) + len(dialog)
         if self.dev_config.DEBUG_MODE:
             print("context长度:", context_len)
             print("提示词总长度:", len(context))
@@ -354,9 +289,6 @@ class MainAgent:
             print("对话记忆：")
             print(dialog)
             debug_msg_pool.append_msg(dialog)
-            print("事件记忆：")
-            print(event)
-            debug_msg_pool.append_msg(event)
         return context_len
 
     # 获取相关记忆
@@ -391,13 +323,8 @@ class MainAgent:
 
         dialog_mem = high_word_similarity_text_filter(self, dialog_mem)
 
-        event_mem = self.store_tool.get_event_mem(query, self.event_store)
-
-        event_mem = high_word_similarity_text_filter(self, event_mem)
-
         # 随机打乱列表，shuffle是随机打乱列表的函数
         random.shuffle(entity_mem)
         random.shuffle(dialog_mem)
-        random.shuffle(event_mem)
 
-        return entity_mem, dialog_mem, event_mem
+        return entity_mem, dialog_mem

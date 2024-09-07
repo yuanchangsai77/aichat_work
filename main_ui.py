@@ -4,8 +4,7 @@ import gradio as gr
 import os
 from datetime import datetime
 
-from worldmanager import Manager
-from worldsandbox import Sandbox
+from sandbox import Sandbox
 from command import debug_msg_pool, command_config, command_start
 from config import BaseConfig, DevConfig
 
@@ -39,7 +38,6 @@ class ui_surface:
         # 参数读取
         self.base_config = BaseConfig()#基本配置
         self.dev_config = DevConfig()#开发配置
-        self.manager = Manager(self.base_config.world_name)#管理器，用于检查和管理身份信息
         self.valid_config = self.manager.check(self.base_config.world_name, self.base_config.ai_name)#检查身份信息是否有效
         self.debug_msg_max_col = 20#调试信息最大列数
         self.debug_msg_len = 0#调试信息长度

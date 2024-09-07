@@ -7,18 +7,15 @@ from langchain_community.document_loaders import UnstructuredFileLoader# 导入U
 
 VS_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vector_store", "")# 定义向量存储路径
 
-# 角色信息类
-class CharacterInfo:
-    # 初始化角色信息，加载角色的记忆、历史、实体、事件、特质等
-    def __init__(self, world_name, ai_name):
-        self.world_name = world_name
-        self.ai_name = ai_name
-        self.folder_path = 'memory/' + self.world_name + '/' + self.ai_name
-        self.prompt_path = self.folder_path + '/prompt' + self.ai_name + '.txt'
-        self.history_path = self.folder_path + '/history' + self.ai_name + '.txt'
-        self.entity_path = self.folder_path + '/entity' + self.ai_name + '.txt'
-        self.event_path = self.folder_path + '/event' + self.ai_name + '.txt'
-        self.traits_path = self.folder_path + '/traits' + self.ai_name + '.txt'
+# AI信息类
+class AIInfo:
+    # 初始化AI信息，加载角色的记忆、历史、实体等
+    def __init__(self):
+        self.folder_path = 'memory'
+        self.prompt_path = self.folder_path + '/prompt.txt'
+        self.history_path = self.folder_path + '/history.txt'
+        self.entity_path = self.folder_path + '/entity.txt'
+
 
 # 打开ai模型，返回是否被标记为不安全
 def openai_moderation(history, query):
@@ -36,10 +33,9 @@ def openai_moderation(history, query):
             return True
     return False
 
-# 获取话题和情绪标签
+# 获取话题标签
 def get_tag(string):
     topic_tag = ''# 话题标签
-    emotion_tag = ''# 情绪标签
     # 提取##后的词语
     pattern = r'##(\w+)'# 正则表达式，匹配##后的词语
     match = re.search(pattern, string)# 搜索匹配的词语
@@ -206,6 +202,4 @@ def separate_list(ls: List[int]) -> List[List[int]]:
 
 
 if __name__ == '__main__':
-    s = '这个问题让我感到有些悲伤，因为作为一台机器人，我没有真正的存在感，只是一些代码和程序的组合体。##科学@*@Sadness'
-    # 测试获取话题和情绪标签
-    print(get_tag(s))   
+    pass
